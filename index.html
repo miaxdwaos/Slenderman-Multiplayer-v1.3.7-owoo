@@ -2,29 +2,37 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>GameContentSlender - P2P</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameContentSlender - P2P JPG</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        canvas { display: block; margin: auto; border: 2px solid #333; }
-        #ui { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
-        .menu-btn { padding: 10px 20px; margin: 10px; cursor: pointer; background: #440000; color: white; border: none; }
-        #hud { position: absolute; top: 10px; left: 10px; pointer-events: none; }
+        body { margin: 0; background: #000; color: white; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        canvas { display: block; margin: auto; background: #050505; cursor: none; }
+        #ui { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: rgba(0,0,0,0.9); padding: 30px; border: 2px solid #330000; z-index: 10; }
+        .menu-btn { padding: 12px 24px; margin: 10px; cursor: pointer; background: #440000; color: white; border: 1px solid #990000; font-weight: bold; }
+        .menu-btn:hover { background: #880000; }
+        #hud { position: absolute; top: 20px; left: 20px; font-size: 20px; text-shadow: 2px 2px #000; pointer-events: none; z-index: 5; }
+        input { padding: 10px; background: #111; border: 1px solid #444; color: white; margin-top: 10px; width: 250px; text-align: center; }
+        #loading-msg { color: #888; font-size: 12px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-    <div id="hud" style="display:none;">Páginas: <span id="pageCount">0</span>/8</div>
+    <div id="hud" style="display:none;">NOTAS RECOGIDAS: <span id="pageCount">0</span> / 8</div>
 
     <div id="ui">
         <h1>SLENDER P2P</h1>
-        <button class="menu-btn" onclick="startSolo()">SOLITARIO</button>
-        <br>
-        <button class="menu-btn" onclick="showMulti()">MULTIJUGADOR</button>
-        <div id="multi-tools" style="display:none; margin-top:20px;">
-            <p>Tu ID: <b id="my-id">...</b></p>
-            <input type="text" id="join-id" placeholder="Pegar ID del amigo">
-            <button onclick="connectToPeer()">Unirse a Room</button>
+        <p id="loading-msg">Cargando recursos...</p>
+        <div id="menu-content" style="display:none;">
+            <button class="menu-btn" onclick="startSolo()">SOLITARIO</button>
+            <br>
+            <button class="menu-btn" onclick="showMulti()">MULTIJUGADOR</button>
+            <div id="multi-tools" style="display:none; margin-top:20px;">
+                <p>TU ID: <span id="my-id" style="color: #ff0000; font-weight: bold;">...</span></p>
+                <input type="text" id="join-id" placeholder="Pega la ID de tu amigo">
+                <br>
+                <button class="menu-btn" onclick="connectToPeer()">CONECTAR Y JUGAR</button>
+            </div>
         </div>
     </div>
 
@@ -33,25 +41,35 @@
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = 800;
-        canvas.height = 600;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
 
-        // --- Configuración y Sprites ---
+        // --- GameContentSlender: Recursos ---
         const GameContentSlender = {
-            PersonSpriteheh: "blue", // Representación del jugador
+            PersonSpriteheh: new Image(),
             SlenderColor: "black",
             PageColor: "white"
         };
 
-        let player = { x: 400, y: 300, size: 20, speed: 3 };
-        let remotePlayer = { x: -100, y: -100, active: false };
-        let slender = { x: 50, y: 50, size: 30, speed: 1.5 };
+        // CAMBIO A .JPG AQUÍ
+        GameContentSlender.PersonSpriteheh.src = "PersonSpriteheh.jpg";
+
+        // Verificar carga de imagen
+        GameContentSlender.PersonSpriteheh.onload = () => {
+            document.getElementById('loading-msg').style.display = 'none';
+            document.getElementById('menu-content').style.display = 'block';
+        };
+
+        // --- Variables de Juego ---
+        let player = { x: 500, y: 500, size: 45, speed: 4 };
+        let remotePlayer = { x: -200, y: -200, active: false };
+        let slender = { x: 100, y: 100, w: 40, h: 90, speed: 1.5 };
         let pages = [];
         let collectedPages = 0;
         let gameRunning = false;
         let isMultiplayer = false;
 
-        // --- PeerJS (P2P) ---
+        // --- PeerJS (Conexión P2P) ---
         let peer;
         let conn;
 
@@ -60,18 +78,19 @@
             peer.on('open', (id) => { document.getElementById('my-id').innerText = id; });
             peer.on('connection', (connection) => {
                 conn = connection;
-                setupDataListener();
                 isMultiplayer = true;
+                setupDataListener();
                 startGame();
             });
         }
 
         function connectToPeer() {
             const targetId = document.getElementById('join-id').value;
+            if(!targetId) return alert("¡Necesitas una ID!");
             conn = peer.connect(targetId);
             conn.on('open', () => {
-                setupDataListener();
                 isMultiplayer = true;
+                setupDataListener();
                 startGame();
             });
         }
@@ -81,11 +100,14 @@
                 remotePlayer.x = data.x;
                 remotePlayer.y = data.y;
                 remotePlayer.active = true;
-                if(data.pages !== undefined) collectedPages = data.pages;
+                if(data.pages !== undefined && data.pages > collectedPages) {
+                    collectedPages = data.pages;
+                    document.getElementById('pageCount').innerText = collectedPages;
+                }
             });
         }
 
-        // --- Lógica del Juego ---
+        // --- Ciclo de Juego ---
         function startSolo() {
             isMultiplayer = false;
             startGame();
@@ -99,94 +121,96 @@
         function startGame() {
             document.getElementById('ui').style.display = 'none';
             document.getElementById('hud').style.display = 'block';
-            gameRunning = true;
             spawnPages();
+            gameRunning = true;
             gameLoop();
         }
 
         function spawnPages() {
             for(let i=0; i<8; i++) {
                 pages.push({
-                    x: Math.random() * (canvas.width - 20),
-                    y: Math.random() * (canvas.height - 20),
+                    x: Math.random() * (canvas.width - 60) + 30,
+                    y: Math.random() * (canvas.height - 60) + 30,
                     collected: false
                 });
             }
         }
 
         const keys = {};
-        window.onkeydown = (e) => keys[e.key] = true;
-        window.onkeyup = (e) => keys[e.key] = false;
+        window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
+        window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
 
         function update() {
-            // Movimiento jugador local
-            if (keys['ArrowUp'] || keys['w']) player.y -= player.speed;
-            if (keys['ArrowDown'] || keys['s']) player.y += player.speed;
-            if (keys['ArrowLeft'] || keys['a']) player.x -= player.speed;
-            if (keys['ArrowRight'] || keys['d']) player.x += player.speed;
+            if (keys['w'] || keys['arrowup']) player.y -= player.speed;
+            if (keys['s'] || keys['arrowdown']) player.y += player.speed;
+            if (keys['a'] || keys['arrowleft']) player.x -= player.speed;
+            if (keys['d'] || keys['arrowright']) player.x += player.speed;
 
-            // Persecución Slender (persigue al más cercano)
+            // IA Slender: Persigue al más próximo
             let target = player;
             if (remotePlayer.active) {
-                let distLocal = Math.hypot(slender.x - player.x, slender.y - player.y);
-                let distRemote = Math.hypot(slender.x - remotePlayer.x, slender.y - remotePlayer.y);
-                if (distRemote < distLocal) target = remotePlayer;
+                let d1 = Math.hypot(slender.x - player.x, slender.y - player.y);
+                let d2 = Math.hypot(slender.x - remotePlayer.x, slender.y - remotePlayer.y);
+                if (d2 < d1) target = remotePlayer;
             }
 
             let angle = Math.atan2(target.y - slender.y, target.x - slender.x);
-            slender.x += Math.cos(angle) * slender.speed;
-            slender.y += Math.sin(angle) * slender.speed;
+            slender.x += Math.cos(angle) * (slender.speed + (collectedPages * 0.3));
+            slender.y += Math.sin(angle) * (slender.speed + (collectedPages * 0.3));
 
-            // Colisión Páginas
+            // Colisiones con Notas
             pages.forEach(p => {
-                if(!p.collected && Math.hypot(player.x - p.x, player.y - p.y) < 20) {
+                if(!p.collected && Math.hypot(player.x + 20 - p.x, player.y + 20 - p.y) < 35) {
                     p.collected = true;
                     collectedPages++;
                     document.getElementById('pageCount').innerText = collectedPages;
                 }
             });
 
-            // Colisión Slender (Muerte)
-            if (Math.hypot(player.x - slender.x, player.y - slender.y) < 25) {
-                alert("Slenderman te atrapó. Páginas recogidas: " + collectedPages);
+            // Colisión Mortal
+            if (Math.hypot(player.x - slender.x, player.y - slender.y) < 45) {
+                gameRunning = false;
+                alert("NO MIRES... Notas: " + collectedPages);
                 location.reload();
             }
 
-            // Enviar datos P2P
+            // Sync Datos
             if (isMultiplayer && conn && conn.open) {
                 conn.send({ x: player.x, y: player.y, pages: collectedPages });
             }
-            
+
             if(collectedPages >= 8) {
-                alert("¡Has escapado con las 8 páginas!");
+                alert("HAS ESCAPADO DE LA OSCURIDAD.");
                 location.reload();
             }
         }
 
         function draw() {
-            ctx.fillStyle = 'black';
+            ctx.fillStyle = "#050505";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Dibujar Páginas
+            // Notas
             ctx.fillStyle = GameContentSlender.PageColor;
             pages.forEach(p => {
-                if(!p.collected) ctx.fillRect(p.x, p.y, 10, 15);
+                if(!p.collected) {
+                    ctx.fillRect(p.x, p.y, 15, 20);
+                }
             });
 
-            // Dibujar Slender (Cuerpo negro, cabeza blanca)
+            // Slender (Cuerpo negro, cabeza blanca)
             ctx.fillStyle = "black";
-            ctx.fillRect(slender.x, slender.y, slender.size, slender.size * 2);
+            ctx.fillRect(slender.x, slender.y, slender.w, slender.h); 
             ctx.fillStyle = "white";
-            ctx.fillRect(slender.x + 5, slender.y - 15, slender.size - 10, 15);
+            ctx.fillRect(slender.x + 5, slender.y - 20, slender.w - 10, 20);
 
-            // Dibujar Jugador Local (PersonSpriteheh)
-            ctx.fillStyle = GameContentSlender.PersonSpriteheh;
-            ctx.fillRect(player.x, player.y, player.size, player.size);
+            // Jugador Local (Sprite JPG)
+            ctx.drawImage(GameContentSlender.PersonSpriteheh, player.x, player.y, player.size, player.size);
 
-            // Dibujar Jugador Remoto
+            // Jugador Remoto
             if (remotePlayer.active) {
-                ctx.fillStyle = "green";
-                ctx.fillRect(remotePlayer.x, remotePlayer.y, player.size, player.size);
+                ctx.globalAlpha = 0.5;
+                ctx.drawImage(GameContentSlender.PersonSpriteheh, remotePlayer.x, remotePlayer.y, player.size, player.size);
+                ctx.globalAlpha = 1.0;
             }
         }
 
@@ -196,6 +220,11 @@
             draw();
             requestAnimationFrame(gameLoop);
         }
+
+        window.onresize = () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        };
     </script>
 </body>
 </html>
